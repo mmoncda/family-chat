@@ -3,9 +3,12 @@ from flask_socketio import SocketIO, send
 import sqlite3
 import os
 
+# ---------- APP SETUP ----------
 app = Flask(__name__)
 app.secret_key = "supersecretfamilykey"
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+
+# Let Flask-SocketIO auto-detect async mode
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 DB_FILE = "chat.db"
 
@@ -14,8 +17,19 @@ def init_db():
     if not os.path.exists(DB_FILE):
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
-        c.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, message TEXT)")
-        c.execute("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, family_code TEXT)")
+        c.execute("""
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT,
+                message TEXT
+            )
+        """)
+        c.execute("""
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                family_code TEXT
+            )
+        """)
         # Insert default family code
         c.execute("INSERT INTO users (family_code) VALUES (?)", ("FAMILY123",))
         conn.commit()
@@ -67,12 +81,18 @@ def chat():
 # ---------- SOCKET.IO ----------
 @socketio.on("message")
 def handle_message(msg):
-    username, message_text = msg.split(":", 1)
-    save_message(username.strip(), message_text.strip())
-    send(msg, broadcast=True)
+    if ":" in msg:
+        username, message_text = msg.split(":", 1)
+        save_message(username.strip(), message_text.strip())
+        send(msg, broadcast=True)
 
 # ---------- MAIN ----------
 if __name__ == "__main__":
     init_db()
-    socketio.run(app, host="0.0.0.0", port=5001, debug=True, allow_unsafe_werkzeug=True)
-
+    socketio.run(
+        app,
+        host="0.0.0.0",
+        port=5001,
+        debug=True,
+        allow_unsafe_werkzeug=True  # Needed for Render deployment
+    )
